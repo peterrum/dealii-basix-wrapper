@@ -14,16 +14,49 @@ using namespace dealii;
 template <int dim, int spacedim = dim>
 class BasixFE : public FiniteElement<dim, spacedim>
 {
+private:
+  static FiniteElementData<dim>
+  generate_finite_element_data(const std::unique_ptr<basix::FiniteElement> &fe)
+  {
+    std::vector<unsigned int> dpo(dim + 1);
+
+    for (unsigned int i = 0; i <= dim; ++i)
+      dpo[i] = fe->num_entity_dofs()[i][0 /*TODO*/];
+
+    ReferenceCell reference_cell;
+
+    switch (fe->cell_type())
+      {
+        case basix::cell::type::triangle:
+          reference_cell = ReferenceCells::Triangle;
+          break;
+        default:
+          Assert(false, ExcNotImplemented());
+      }
+
+    const unsigned int n_components = 1; // TODO
+
+    const unsigned int degree = fe->degree();
+
+    typename FiniteElementData<dim>::Conformity conformity;
+
+    if (fe->discontinuous())
+      conformity = FiniteElementData<dim>::Conformity::L2;
+    else
+      conformity = FiniteElementData<dim>::Conformity::H1;
+
+    return FiniteElementData<dim>(
+      dpo, reference_cell, n_components, degree, conformity);
+  }
+
+
 public:
-  BasixFE()
+  BasixFE(const std::unique_ptr<basix::FiniteElement> &fe)
     : FiniteElement<dim, spacedim>(
-        FiniteElementData<dim>(std::vector<unsigned int>() /*TODO*/,
-                               ReferenceCells::get_simplex<dim>() /*TODO*/,
-                               1 /*TODO*/,
-                               1 /*TODO*/,
-                               FiniteElementData<dim>::H1),
-        std::vector<bool>(),
-        std::vector<ComponentMask>())
+        generate_finite_element_data(fe),
+        std::vector<bool>(fe->dim()),
+        std::vector<ComponentMask>(fe->dim(), ComponentMask(1 /*TODO*/, true)))
+    , fe(fe)
   {}
 
   std::unique_ptr<FiniteElement<dim, spacedim>>
@@ -39,6 +72,45 @@ public:
     namebuf << "BasixFE<" << dim << ">(" << this->degree << ")";
 
     return namebuf.str();
+  }
+
+  virtual unsigned int
+  adjust_quad_dof_index_for_face_orientation(
+    const unsigned int index,
+    const unsigned int face_no,
+    const bool         face_orientation,
+    const bool         face_flip,
+    const bool         face_rotation) const override
+  {
+    if (fe->dof_transformations_are_identity())
+      return index;
+
+    Assert(false, ExcNotImplemented());
+
+    (void)index;
+    (void)face_no;
+    (void)face_orientation;
+    (void)face_flip;
+    (void)face_rotation;
+  }
+
+  virtual unsigned int
+  adjust_line_dof_index_for_line_orientation(
+    const unsigned int index,
+    const bool         line_orientation) const override
+  {
+    if (fe->dof_transformations_are_identity())
+      return index;
+
+    if (line_orientation == true)
+      return index;
+
+    const unsigned int line_no   = 0;                        // TODO
+    const unsigned int new_index = this->degree - 2 - index; // TODO
+
+    (void)line_no;
+
+    return new_index;
   }
 
   UpdateFlags
@@ -125,6 +197,9 @@ public:
     (void)fe_internal;
     (void)output_data;
   }
+
+private:
+  const std::unique_ptr<basix::FiniteElement> &fe;
 };
 
 /**
@@ -140,7 +215,7 @@ main()
   auto _element = std::make_unique<basix::FiniteElement>(
     basix::create_element(basix::element::family::P,
                           basix::cell::type::triangle,
-                          2,
+                          3,
                           basix::element::lagrange_variant::equispaced,
                           false));
 
@@ -182,9 +257,22 @@ main()
 
     DoFHandler<dim> dof_handler(tria);
 
-    BasixFE<dim> fe;
+    BasixFE<dim> fe(_element);
 
     dof_handler.distribute_dofs(fe);
+
+    std::vector<types::global_dof_index> dof_indices;
+
+    for (const auto cell : dof_handler.active_cell_iterators())
+      {
+        dof_indices.resize(cell->get_fe().n_dofs_per_cell());
+
+        cell->get_dof_indices(dof_indices);
+
+        for (const auto i : dof_indices)
+          std::cout << std::setw(3) << i << " ";
+        std::cout << std::endl;
+      }
   }
 
   return 0;
