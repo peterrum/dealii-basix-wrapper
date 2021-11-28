@@ -18,6 +18,10 @@ private:
   static FiniteElementData<dim>
   generate_finite_element_data(const std::unique_ptr<basix::FiniteElement> &fe)
   {
+    // see also:
+    // https://docs.fenicsproject.org/basix/main/cpp/classbasix_1_1FiniteElement.html#aff0f6d20c7990da4441b81bea8aab4ec
+    // https://docs.fenicsproject.org/basix/main/cpp/namespacebasix_1_1cell.html#a98b2aebaf61e060096e7bb0f7d131a29
+
     std::vector<unsigned int> dpo(dim + 1);
 
     for (unsigned int i = 0; i <= dim; ++i)
@@ -58,11 +62,8 @@ public:
         std::vector<ComponentMask>(fe->dim(), ComponentMask(1 /*TODO*/, true)))
     , fe(fe)
   {
-    if (fe->dof_transformations_are_identity())
-      {
-        // nothing to do
-      }
-    else if (fe->dof_transformations_are_permutations())
+    if (fe->dof_transformations_are_identity() == false &&
+        fe->dof_transformations_are_permutations())
       {
         AssertDimension(dim, 2);
 
@@ -96,10 +97,6 @@ public:
             counter += n_dofs;
           }
       }
-    else
-      {
-        Assert(false, ExcNotImplemented());
-      }
   }
 
   std::unique_ptr<FiniteElement<dim, spacedim>>
@@ -125,7 +122,8 @@ public:
     const bool         face_flip,
     const bool         face_rotation) const override
   {
-    if (fe->dof_transformations_are_identity())
+    if (fe->dof_transformations_are_identity() ||
+        (fe->dof_transformations_are_permutations() == false))
       return index;
 
     Assert(false, ExcNotImplemented());
@@ -142,7 +140,8 @@ public:
     const unsigned int index,
     const bool         line_orientation) const override
   {
-    if (fe->dof_transformations_are_identity())
+    if (fe->dof_transformations_are_identity() ||
+        (fe->dof_transformations_are_permutations() == false))
       return index;
 
     if (line_orientation == true)
@@ -199,6 +198,13 @@ public:
       &output_data) const
   {
     Assert(false, ExcNotImplemented());
+
+    Assert(fe->dof_transformations_are_identity() ||
+             fe->dof_transformations_are_permutations(),
+           ExcNotImplemented());
+
+    // see also:
+    // https://github.com/dealii/dealii/blob/7f2be3b746c03f7221ef779903a9714502f215ff/source/fe/fe_poly_tensor.cc#L530
 
     (void)cell;
     (void)cell_similarity;
