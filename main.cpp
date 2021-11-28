@@ -245,77 +245,50 @@ private:
 };
 
 /**
- * /home/munch/sw-basix/cmake-3.22.0-install/bin/cmake ..
- * -DBasix_DIR=/home/munch/sw-basix/basix-install/lib64/cmake/basix/
- * -Dxtl_DIR=/home/munch/sw-basix/basix/_deps/xtl-build
- * -Dxtensor_DIR=/home/munch/sw-basix/basix/_deps/xtensor-build
- * -DDEAL_II_DIR=../dealii-build
+ * /home/munch/sw-basix/cmake-3.22.0-install/bin/cmake
+ *   -DBasix_DIR=/home/munch/sw-basix/basix-install/lib64/cmake/basix/
+ *   -Dxtl_DIR=/home/munch/sw-basix/basix/_deps/xtl-build
+ *   -Dxtensor_DIR=/home/munch/sw-basix/basix/_deps/xtensor-build
+ *   -DDEAL_II_DIR=../dealii-build
+ * ..
  */
 int
 main()
 {
-  auto _element = std::make_unique<basix::FiniteElement>(
+  const unsigned int dim = 2;
+
+  const auto _element = std::make_unique<basix::FiniteElement>(
     basix::create_element(basix::element::family::P,
                           basix::cell::type::triangle,
                           3,
                           basix::element::lagrange_variant::equispaced,
                           false));
 
-  std::cout << _element->dim() << std::endl;
+  Triangulation<dim> tria;
 
-  for (int j = 0; j < _element->dim(); ++j)
+  GridGenerator::subdivided_hyper_rectangle_with_simplices(tria,
+                                                           {1, 1},
+                                                           {0.0, 0.0},
+                                                           {1.0, 1.0});
+
+  DoFHandler<dim> dof_handler(tria);
+
+  const BasixFE<dim> fe(_element);
+
+  dof_handler.distribute_dofs(fe);
+
+  std::vector<types::global_dof_index> dof_indices;
+
+  for (const auto cell : dof_handler.active_cell_iterators())
     {
-      for (unsigned int i = 0; i < 2; ++i)
-        std::cout << _element->points()(j, i) << " ";
+      dof_indices.resize(cell->get_fe().n_dofs_per_cell());
+
+      cell->get_dof_indices(dof_indices);
+
+      for (const auto i : dof_indices)
+        std::cout << std::setw(3) << i << " ";
       std::cout << std::endl;
     }
-
-  const auto &trafo = _element->base_transformations();
-
-  std::cout << trafo.shape()[0] << std::endl;
-  std::cout << trafo.shape()[1] << std::endl;
-  std::cout << trafo.shape()[2] << std::endl;
-
-  for (unsigned int i = 0; i < trafo.shape()[0]; ++i)
-    {
-      for (unsigned int j = 0; j < trafo.shape()[1]; ++j)
-        {
-          for (unsigned int k = 0; k < trafo.shape()[2]; ++k)
-            std::cout << trafo(i, j, k) << " ";
-          std::cout << std::endl;
-        }
-      std::cout << std::endl;
-    }
-
-  {
-    const unsigned int dim = 2;
-
-    Triangulation<dim> tria;
-
-    GridGenerator::subdivided_hyper_rectangle_with_simplices(tria,
-                                                             {1, 1},
-                                                             {0.0, 0.0},
-                                                             {1.0, 1.0});
-
-    DoFHandler<dim> dof_handler(tria);
-
-    BasixFE<dim> fe(_element);
-
-    dof_handler.distribute_dofs(fe);
-
-    std::vector<types::global_dof_index> dof_indices;
-
-    for (const auto cell : dof_handler.active_cell_iterators())
-      {
-        dof_indices.resize(cell->get_fe().n_dofs_per_cell());
-
-        cell->get_dof_indices(dof_indices);
-
-        for (const auto i : dof_indices)
-          std::cout << std::setw(3) << i << " ";
-        std::cout << std::endl;
-      }
-  }
 
   return 0;
 }
