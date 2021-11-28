@@ -57,7 +57,50 @@ public:
         std::vector<bool>(fe->dim()),
         std::vector<ComponentMask>(fe->dim(), ComponentMask(1 /*TODO*/, true)))
     , fe(fe)
-  {}
+  {
+    if (fe->dof_transformations_are_identity())
+      {
+        // nothing to do
+      }
+    else if (fe->dof_transformations_are_permutations())
+      {
+        AssertDimension(dim, 2);
+
+        const auto n_vertices = this->reference_cell().n_vertices();
+        const auto n_lines    = this->reference_cell().n_lines();
+
+        orienation_table.resize(n_lines);
+
+        unsigned int counter = n_vertices * this->n_dofs_per_vertex();
+
+        const auto &trafo = fe->base_transformations();
+
+        for (unsigned int l = 0; l < n_lines; ++l)
+          {
+            // TODO: deal.II assumes that all faces have the same number of
+            // DoFs
+            const unsigned int n_dofs = this->n_dofs_per_line();
+
+            orienation_table[l].resize(n_dofs);
+
+            for (unsigned int i = 0; i < n_dofs; ++i)
+              for (unsigned int j = 0; j < n_dofs; ++j)
+                {
+                  if (trafo(l, counter + j, counter + i))
+                    {
+                      orienation_table[l][i] = j;
+                      break;
+                    }
+                }
+
+            counter += n_dofs;
+          }
+      }
+    else
+      {
+        Assert(false, ExcNotImplemented());
+      }
+  }
 
   std::unique_ptr<FiniteElement<dim, spacedim>>
   clone() const override
@@ -105,12 +148,10 @@ public:
     if (line_orientation == true)
       return index;
 
-    const unsigned int line_no   = 0;                        // TODO
-    const unsigned int new_index = this->degree - 2 - index; // TODO
+    // TODO: deal.II assumes that all faces have the same number of DoFs
+    const unsigned int line_no = 0;
 
-    (void)line_no;
-
-    return new_index;
+    return orienation_table[line_no][index];
   }
 
   UpdateFlags
@@ -200,6 +241,7 @@ public:
 
 private:
   const std::unique_ptr<basix::FiniteElement> &fe;
+  std::vector<std::vector<unsigned int>>       orienation_table;
 };
 
 /**
